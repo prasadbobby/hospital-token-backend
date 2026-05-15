@@ -78,7 +78,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // 24 hours
+  maxAge: 0 // Disable preflight caching temporarily
 }));
 
 // Handle preflight requests
