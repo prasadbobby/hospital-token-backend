@@ -74,7 +74,7 @@ app.set('broadcast', broadcast);
 // Middleware
 // ==========================================
 app.use(cors({
-  origin: '*',
+  origin: ['https://hospital-token-frontend.vercel.app', 'http://localhost:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization'],
