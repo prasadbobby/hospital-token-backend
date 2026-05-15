@@ -74,9 +74,17 @@ app.set('broadcast', broadcast);
 // Middleware
 // ==========================================
 app.use(cors({
-  origin: '*'
- 
+  origin: '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // 24 hours
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 
 // Request logging
