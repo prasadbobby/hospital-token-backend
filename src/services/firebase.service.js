@@ -1,13 +1,33 @@
 import { db } from '../config/firebase.js';
 
+// Timeout wrapper for Firebase operations
+const withTimeout = (promise, ms = 10000, operation = 'Firebase operation') => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    )
+  ]);
+};
+
 // Generic CRUD operations for Firebase Realtime Database
 export const FirebaseService = {
   // Get all items from a collection
   async getAll(collection) {
-    const snapshot = await db.ref(collection).once('value');
-    const data = snapshot.val();
-    if (!data) return [];
-    return Object.entries(data).map(([id, value]) => ({ id, ...value }));
+    try {
+      console.log(`[Firebase] getAll: ${collection}`);
+      const snapshot = await withTimeout(
+        db.ref(collection).once('value'),
+        15000,
+        `getAll(${collection})`
+      );
+      const data = snapshot.val();
+      if (!data) return [];
+      return Object.entries(data).map(([id, value]) => ({ id, ...value }));
+    } catch (error) {
+      console.error(`[Firebase] getAll error:`, error.message);
+      throw error;
+    }
   },
 
   // Get single item by ID
@@ -19,10 +39,21 @@ export const FirebaseService = {
 
   // Get items by field value
   async getByField(collection, field, value) {
-    const snapshot = await db.ref(collection).orderByChild(field).equalTo(value).once('value');
-    const data = snapshot.val();
-    if (!data) return [];
-    return Object.entries(data).map(([id, val]) => ({ id, ...val }));
+    try {
+      console.log(`[Firebase] getByField: ${collection}.${field} = ${value}`);
+      const snapshot = await withTimeout(
+        db.ref(collection).orderByChild(field).equalTo(value).once('value'),
+        15000,
+        `getByField(${collection}, ${field})`
+      );
+      const data = snapshot.val();
+      console.log(`[Firebase] getByField result: ${data ? 'found data' : 'no data'}`);
+      if (!data) return [];
+      return Object.entries(data).map(([id, val]) => ({ id, ...val }));
+    } catch (error) {
+      console.error(`[Firebase] getByField error:`, error.message);
+      throw error;
+    }
   },
 
   // Create new item (auto-generated ID)

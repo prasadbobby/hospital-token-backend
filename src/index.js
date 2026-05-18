@@ -74,7 +74,7 @@ app.set('broadcast', broadcast);
 // Middleware
 // ==========================================
 app.use(cors({
-  origin: ['https://hospital-token-frontend.vercel.app', 'http://localhost:5173'],
+  origin: ['https://hospital-token-frontend.vercel.app', 'http://localhost:5173', 'http://localhost:8080'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization'],
@@ -100,6 +100,38 @@ app.get('/api/health', (req, res) => {
     websocket: `ws://localhost:${PORT}/ws`,
     clients: clients.size
   });
+});
+
+// Deep health check - tests Firebase connection
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const { db } = await import('./config/firebase.js');
+    const startTime = Date.now();
+
+    // Test with timeout
+    const testPromise = db.ref('.info/connected').once('value');
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Database connection timeout')), 5000)
+    );
+
+    await Promise.race([testPromise, timeoutPromise]);
+    const duration = Date.now() - startTime;
+
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      latency: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[Health] Database check failed:', error.message);
+    res.status(503).json({
+      status: 'error',
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // API Routes

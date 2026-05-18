@@ -21,9 +21,26 @@ try {
   if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
     console.log('[Firebase] Using environment variables for authentication');
 
+    // Handle private key formatting - Render and other platforms may handle \n differently
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    // If the key contains literal \n (as string), replace with actual newlines
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+
+    // If the key doesn't have actual newlines yet (came as single line), add them
+    if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN')) {
+      // The key might be base64 encoded or mangled - try to reconstruct
+      console.log('[Firebase] Warning: Private key may be malformed, attempting to use as-is');
+    }
+
+    console.log('[Firebase] Private key length:', privateKey.length);
+    console.log('[Firebase] Private key starts with:', privateKey.substring(0, 30));
+
     credential = admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      privateKey: privateKey,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
     });
   }
@@ -63,8 +80,13 @@ try {
 
   db = admin.database();
   isConnected = true;
-  console.log('[Firebase] ✓ Connected to Firebase Realtime Database');
+  console.log('[Firebase] ✓ Firebase Admin SDK initialized');
   console.log('[Firebase] ✓ Database URL:', firebaseConfig.databaseURL);
+
+  // Test connection asynchronously (non-blocking)
+  db.ref('.info/connected').once('value')
+    .then(() => console.log('[Firebase] ✓ Database connection verified'))
+    .catch(err => console.error('[Firebase] ✗ Database connection test failed:', err.message));
 } catch (error) {
   console.error('\n============================================');
   console.error('  FIREBASE CONNECTION FAILED');
