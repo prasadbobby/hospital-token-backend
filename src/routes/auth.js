@@ -98,6 +98,7 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
+    console.log('[Auth] Login request received');
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -105,36 +106,48 @@ router.post('/login', async (req, res) => {
     }
 
     // Find user
+    console.log('[Auth] Finding user...');
     const users = await FirebaseService.getByField('users', 'email', email.toLowerCase());
 
     if (users.length === 0) {
+      console.log('[Auth] User not found');
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = users[0];
+    console.log('[Auth] User found:', user.email);
 
     // Check if user is active
     if (!user.active) {
+      console.log('[Auth] User deactivated');
       return res.status(401).json({ error: 'Account is deactivated' });
     }
 
     // Verify password
+    console.log('[Auth] Verifying password...');
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
+      console.log('[Auth] Invalid password');
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+    console.log('[Auth] Password valid');
 
     // Generate token
+    console.log('[Auth] Generating token...');
     const token = generateToken({
       id: user.id,
       email: user.email,
       role: user.role,
       name: user.name
     });
+    console.log('[Auth] Token generated');
 
     // Update last login
+    console.log('[Auth] Updating last login...');
     await FirebaseService.update('users', user.id, { lastLogin: new Date().toISOString() });
+    console.log('[Auth] Last login updated');
 
+    console.log('[Auth] Sending response...');
     res.json({
       message: 'Login successful',
       token,
@@ -145,8 +158,9 @@ router.post('/login', async (req, res) => {
         role: user.role
       }
     });
+    console.log('[Auth] Response sent');
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('[Auth] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });

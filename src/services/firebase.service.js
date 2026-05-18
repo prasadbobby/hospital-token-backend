@@ -75,10 +75,21 @@ export const FirebaseService = {
 
   // Update item
   async update(collection, id, data) {
-    const timestamp = new Date().toISOString();
-    const updates = { ...data, updatedAt: timestamp };
-    await db.ref(`${collection}/${id}`).update(updates);
-    return { id, ...updates };
+    try {
+      console.log(`[Firebase] update: ${collection}/${id}`);
+      const timestamp = new Date().toISOString();
+      const updates = { ...data, updatedAt: timestamp };
+      await withTimeout(
+        db.ref(`${collection}/${id}`).update(updates),
+        15000,
+        `update(${collection}, ${id})`
+      );
+      console.log(`[Firebase] update complete`);
+      return { id, ...updates };
+    } catch (error) {
+      console.error(`[Firebase] update error:`, error.message);
+      throw error;
+    }
   },
 
   // Delete item
