@@ -20,6 +20,11 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 
+// CRITICAL: Set server timeouts to prevent socket hang-up on Render
+// Default Node.js keepAliveTimeout is 5s which can cause issues with load balancers
+server.keepAliveTimeout = 120000; // 120 seconds (Render's timeout is 30s, but be safe)
+server.headersTimeout = 125000;   // Slightly higher than keepAliveTimeout
+
 // ==========================================
 // WebSocket Server for Real-time Updates
 // ==========================================
