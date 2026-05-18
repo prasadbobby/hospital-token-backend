@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 
@@ -73,16 +72,38 @@ app.set('broadcast', broadcast);
 // ==========================================
 // Middleware
 // ==========================================
-app.use(cors({
-  origin: ['https://hospital-token-frontend.vercel.app', 'http://localhost:5173', 'http://localhost:8080'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 0 // Disable preflight caching temporarily
-}));
 
-// Handle preflight requests
-app.options('*', cors());
+// Manual CORS handling for maximum compatibility
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://hospital-token-frontend.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:8080'
+  ];
+
+  const origin = req.headers.origin;
+  console.log('[CORS] Request from origin:', origin);
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (origin) {
+    console.log('[CORS] WARNING: Origin not in allowed list:', origin);
+    // Still set for debugging - remove in production
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Cache-Control, Pragma');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    console.log('[CORS] Preflight request handled');
+    return res.status(204).end();
+  }
+
+  next();
+});
 
 app.use(express.json());
 
