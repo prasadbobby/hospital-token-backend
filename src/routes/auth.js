@@ -152,7 +152,12 @@ router.post('/login', async (req, res) => {
     // FirebaseService.update('users', user.id, { lastLogin: new Date().toISOString() });
 
     console.log('[Auth] Sending response immediately...');
-    res.json({
+
+    // Debug: Listen to response events
+    res.on('finish', () => console.log('[Auth] Response FINISH event'));
+    res.on('close', () => console.log('[Auth] Response CLOSE event'));
+
+    const responseData = {
       message: 'Login successful',
       token,
       user: {
@@ -161,8 +166,11 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role
       }
-    });
-    console.log('[Auth] res.json() called');
+    };
+
+    console.log('[Auth] Response data size:', JSON.stringify(responseData).length);
+    res.status(200).json(responseData);
+    console.log('[Auth] res.json() called, headersSent:', res.headersSent);
     return;
   } catch (error) {
     console.error('[Auth] Login error:', error);
