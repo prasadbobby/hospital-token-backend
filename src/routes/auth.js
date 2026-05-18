@@ -154,7 +154,9 @@ router.post('/login', async (req, res) => {
     console.log('[Auth] Last login updated');
 
     console.log('[Auth] Sending response...');
-    const responseData = {
+
+    // Use res.json() - the simple approach that works
+    return res.json({
       message: 'Login successful',
       token,
       user: {
@@ -163,16 +165,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role
       }
-    };
-
-    // Explicit headers to ensure proper response delivery through Render's proxy
-    const jsonResponse = JSON.stringify(responseData);
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Length', Buffer.byteLength(jsonResponse));
-    res.setHeader('Connection', 'close');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.status(200).end(jsonResponse);
-    console.log('[Auth] Response sent, length:', Buffer.byteLength(jsonResponse));
+    });
   } catch (error) {
     console.error('[Auth] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
