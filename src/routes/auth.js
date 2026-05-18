@@ -148,7 +148,7 @@ router.post('/login', async (req, res) => {
     console.log('[Auth] Last login updated');
 
     console.log('[Auth] Sending response...');
-    res.json({
+    const responseData = {
       message: 'Login successful',
       token,
       user: {
@@ -157,7 +157,13 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role
       }
-    });
+    };
+
+    // Explicit headers to ensure proper response delivery through Render's proxy
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Connection', 'close');
+    res.setHeader('X-Accel-Buffering', 'no');  // Disable nginx buffering
+    res.status(200).end(JSON.stringify(responseData));
     console.log('[Auth] Response sent');
   } catch (error) {
     console.error('[Auth] Login error:', error);

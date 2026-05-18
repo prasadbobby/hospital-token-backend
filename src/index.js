@@ -107,6 +107,13 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Ensure responses are properly flushed (fix for Render proxy buffering)
+app.use((req, res, next) => {
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  next();
+});
+
 // Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} | ${req.method} ${req.path}`);
