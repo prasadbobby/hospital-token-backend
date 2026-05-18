@@ -148,15 +148,11 @@ router.post('/login', async (req, res) => {
     });
     console.log('[Auth] Token generated');
 
-    // Update last login
-    console.log('[Auth] Updating last login...');
-    await FirebaseService.update('users', user.id, { lastLogin: new Date().toISOString() });
-    console.log('[Auth] Last login updated');
+    // Skip lastLogin update for now - send response immediately
+    // FirebaseService.update('users', user.id, { lastLogin: new Date().toISOString() });
 
-    console.log('[Auth] Sending response...');
-
-    // Use res.json() - the simple approach that works
-    return res.json({
+    console.log('[Auth] Sending response immediately...');
+    res.json({
       message: 'Login successful',
       token,
       user: {
@@ -166,6 +162,8 @@ router.post('/login', async (req, res) => {
         role: user.role
       }
     });
+    console.log('[Auth] res.json() called');
+    return;
   } catch (error) {
     console.error('[Auth] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
