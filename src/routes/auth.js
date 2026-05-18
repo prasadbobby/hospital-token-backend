@@ -101,6 +101,12 @@ router.post('/login', async (req, res) => {
     console.log('[Auth] Login request received');
     const { email, password } = req.body;
 
+    // Quick test mode - add ?test=1 to skip DB and return immediately
+    if (req.query.test === '1') {
+      console.log('[Auth] TEST MODE - returning immediate response');
+      return res.json({ test: true, message: 'Quick response works!' });
+    }
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -160,11 +166,13 @@ router.post('/login', async (req, res) => {
     };
 
     // Explicit headers to ensure proper response delivery through Render's proxy
+    const jsonResponse = JSON.stringify(responseData);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Length', Buffer.byteLength(jsonResponse));
     res.setHeader('Connection', 'close');
-    res.setHeader('X-Accel-Buffering', 'no');  // Disable nginx buffering
-    res.status(200).end(JSON.stringify(responseData));
-    console.log('[Auth] Response sent');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.status(200).end(jsonResponse);
+    console.log('[Auth] Response sent, length:', Buffer.byteLength(jsonResponse));
   } catch (error) {
     console.error('[Auth] Login error:', error);
     res.status(500).json({ error: 'Login failed' });

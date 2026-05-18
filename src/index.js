@@ -130,6 +130,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// POST test endpoint to debug login-like requests
+app.post('/api/test-post', (req, res) => {
+  console.log('[Test] POST received, body:', req.body);
+  const jsonResponse = JSON.stringify({ success: true, received: req.body });
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Length', Buffer.byteLength(jsonResponse));
+  res.setHeader('Connection', 'close');
+  res.status(200).end(jsonResponse);
+  console.log('[Test] Response sent');
+});
+
 // Deep health check - tests Firebase connection
 app.get('/api/health/db', async (req, res) => {
   try {
