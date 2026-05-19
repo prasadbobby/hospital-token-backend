@@ -74,21 +74,33 @@ wss.on('connection', (ws, req) => {
     return;
   }
 
-  // Require authentication for WebSocket
+  // Parse connection details
   const url = new URL(req.url, `ws://${req.headers.host}`);
   const token = url.searchParams.get('token');
+  const publicAccess = url.searchParams.get('public') === 'true';
 
+  // Authenticate connection
   const user = authenticateWsConnection(token);
-  if (!user) {
+
+  // Allow public read-only access for display boards
+  if (!user && !publicAccess) {
     console.log('[WS] Unauthorized connection attempt');
-    ws.close(1008, 'Authentication required');
+    ws.close(1008, 'Authentication required. Add ?public=true for display board access');
     return;
   }
 
   // Track connection
   ipConnections.set(ip, currentConnections + 1);
-  clients.set(ws, { user, channels: new Set(), ip });
-  console.log(`[WS] ${user.email} connected. Total: ${clients.size}`);
+  const clientData = {
+    user: user || { role: 'public', name: 'Public Display' },
+    channels: new Set(),
+    ip,
+    isPublic: !user,
+  };
+  clients.set(ws, clientData);
+
+  const identifier = user ? user.email : `Public:${ip}`;
+  console.log(`[WS] ${identifier} connected (${clientData.isPublic ? 'PUBLIC' : 'AUTH'}). Total: ${clients.size}`);
 
   ws.on('message', (message) => {
     try {
@@ -104,8 +116,23 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'subscribe' && data.channel) {
         const clientData = clients.get(ws);
         if (clientData) {
+          // Public users can only subscribe to read-only channels
+          const publicAllowedChannels = ['tokens', 'display', 'queue'];
+
+          if (clientData.isPublic && !publicAllowedChannels.includes(data.channel)) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Public access limited to: ${publicAllowedChannels.join(', ')}`
+            }));
+            return;
+          }
+
           clientData.channels.add(data.channel);
-          ws.send(JSON.stringify({ type: 'subscribed', channel: data.channel }));
+          ws.send(JSON.stringify({
+            type: 'subscribed',
+            channel: data.channel,
+            isPublic: clientData.isPublic
+          }));
         }
       } else if (data.type === 'unsubscribe' && data.channel) {
         const clientData = clients.get(ws);
@@ -125,7 +152,8 @@ wss.on('connection', (ws, req) => {
       const connections = ipConnections.get(clientData.ip) || 1;
       ipConnections.set(clientData.ip, Math.max(0, connections - 1));
       clients.delete(ws);
-      console.log(`[WS] ${clientData.user.email} disconnected. Total: ${clients.size}`);
+      const identifier = clientData.user.email || `Public:${clientData.ip}`;
+      console.log(`[WS] ${identifier} disconnected. Total: ${clients.size}`);
     }
   });
 
@@ -137,7 +165,9 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify({
     type: 'connected',
     message: 'Connected to Pulse OPD',
-    user: { name: user.name, role: user.role },
+    user: clientData.user,
+    isPublic: clientData.isPublic,
+    allowedChannels: clientData.isPublic ? ['tokens', 'display', 'queue'] : 'all'
   }));
 });
 
