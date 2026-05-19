@@ -67,8 +67,8 @@ export const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'https://hospital-token-frontend.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000', // Next.js
+      'https://pulse-opd-nextjs.vercel.app', // Next.js production
+      'http://localhost:3000', // Next.js dev
       'http://localhost:8080',
     ];
 
@@ -96,7 +96,8 @@ export const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'Pragma', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
   maxAge: 86400, // 24 hours
 };
 
