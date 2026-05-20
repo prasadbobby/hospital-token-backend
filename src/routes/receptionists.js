@@ -85,6 +85,13 @@ router.put('/:id', authenticate, authorize('admin', 'receptionist'), async (req,
     }
 
     delete updates.id;
+    delete updates.role; // Don't allow role change via this endpoint
+    delete updates.password; // Don't allow password change via this endpoint
+
+    // If shift is provided, also update shifts for backward compatibility
+    if (updates.shift) {
+      updates.shifts = updates.shift;
+    }
 
     const receptionist = await FirebaseService.update('receptionists', id, updates);
 
@@ -137,7 +144,19 @@ router.put('/:id/assign', authenticate, authorize('admin'), async (req, res) => 
 // DELETE /api/receptionists/:id - Delete receptionist (admin only)
 router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
-    await FirebaseService.delete('receptionists', req.params.id);
+    const { id } = req.params;
+
+    // Delete receptionist profile
+    await FirebaseService.delete('receptionists', id);
+
+    // Also delete the corresponding user account
+    try {
+      await FirebaseService.delete('users', id);
+    } catch (userError) {
+      console.warn('Could not delete user account:', userError);
+      // Continue even if user deletion fails
+    }
+
     res.json({ message: 'Receptionist deleted successfully' });
   } catch (error) {
     console.error('Delete receptionist error:', error);

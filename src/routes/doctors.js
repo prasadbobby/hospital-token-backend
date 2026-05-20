@@ -284,10 +284,41 @@ router.get('/:id/slots', optionalAuth, async (req, res) => {
   }
 });
 
+// PATCH /api/doctors/:id/toggle - Toggle doctor active status
+router.patch('/:id/toggle', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const doctor = await FirebaseService.getById('doctors', req.params.id);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const updated = await FirebaseService.update('doctors', req.params.id, {
+      active: !doctor.active
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Toggle doctor error:', error);
+    res.status(500).json({ error: 'Failed to toggle doctor status' });
+  }
+});
+
 // DELETE /api/doctors/:id - Delete doctor (admin only)
 router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
-    await FirebaseService.delete('doctors', req.params.id);
+    const { id } = req.params;
+
+    // Delete doctor profile
+    await FirebaseService.delete('doctors', id);
+
+    // Also delete the corresponding user account
+    try {
+      await FirebaseService.delete('users', id);
+    } catch (userError) {
+      console.warn('Could not delete user account:', userError);
+      // Continue even if user deletion fails
+    }
+
     res.json({ message: 'Doctor deleted successfully' });
   } catch (error) {
     console.error('Delete doctor error:', error);

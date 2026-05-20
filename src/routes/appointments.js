@@ -113,12 +113,47 @@ router.post('/', optionalAuth, async (req, res) => {
       doctorId, doctor, specialty,
       departmentId, department,
       visitType, slot, bookedOn,
-      symptoms, notes, amount
+      symptoms, notes, amount,
+      patientId, cardValidUntil, hasValidCard
     } = req.body;
 
     // Validate required fields
     if (!patient || !doctor || !slot) {
       return res.status(400).json({ error: 'Patient name, doctor, and slot are required' });
+    }
+
+    // Handle patient record creation/update for card validity
+    let finalPatientId = patientId;
+    if (phone && cardValidUntil) {
+      try {
+        if (patientId) {
+          // Update existing patient with new card validity
+          await FirebaseService.update('patients', patientId, {
+            cardValidUntil,
+            name: patient,
+            age,
+            gender,
+            email: email || '',
+            lastVisit: new Date().toISOString()
+          });
+        } else {
+          // Create new patient record
+          const newPatient = await FirebaseService.create('patients', {
+            name: patient,
+            age: age || 0,
+            gender: gender || 'Male',
+            phone,
+            email: email || '',
+            cardValidUntil,
+            createdAt: new Date().toISOString(),
+            lastVisit: new Date().toISOString()
+          });
+          finalPatientId = newPatient.id;
+        }
+      } catch (err) {
+        console.error('Failed to create/update patient:', err);
+        // Continue anyway - patient record is optional
+      }
     }
 
     // Get department prefix for token generation
@@ -141,6 +176,7 @@ router.post('/', optionalAuth, async (req, res) => {
     const appointment = await FirebaseService.createWithId('appointments', appointmentId, {
       token,
       patient,
+      patientId: finalPatientId || '',
       age: age || 0,
       gender: gender || 'M',
       phone: phone || '',
@@ -157,8 +193,10 @@ router.post('/', optionalAuth, async (req, res) => {
       symptoms: symptoms || [],
       notes: notes || '',
       status: 'waiting',
-      payment: 'pending',
+      payment: hasValidCard ? 'completed' : 'pending',
       amount: amount || 500,
+      hasValidCard: hasValidCard || false,
+      cardValidUntil: cardValidUntil || null,
       position: 0,
       waitMin: 0
     });
