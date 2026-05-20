@@ -29,6 +29,7 @@ import symptomRoutes from './routes/symptoms.js';
 import reviewRoutes from './routes/reviews.js';
 import statsRoutes from './routes/stats.js';
 import deviceRoutes from './routes/device.js';
+import departmentRoutes from './routes/departments.js';
 
 const app = express();
 const server = createServer(app);
@@ -267,6 +268,7 @@ app.get('/api/health/db', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/doctors', doctorRoutes);
+app.use('/api/departments', departmentRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/receptionists', receptionistRoutes);

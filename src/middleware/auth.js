@@ -25,14 +25,21 @@ export const authenticate = (req, res, next) => {
 };
 
 // Check role authorization
-export const authorize = (...roles) => {
+export const authorize = (allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
+    // Handle both array and single role
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Not authorized for this action' });
+      return res.status(403).json({
+        error: 'Not authorized for this action',
+        required: roles,
+        current: req.user.role
+      });
     }
 
     next();

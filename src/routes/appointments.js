@@ -5,19 +5,26 @@ import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-// Helper to generate token number
-const generateToken = async (department = 'GEN') => {
+// Helper to generate token number with department prefix
+const generateToken = async (departmentPrefix = 'GEN') => {
   const today = new Date().toISOString().split('T')[0];
-  const key = `${department}-${today}`;
 
-  // Get today's count for this department
+  // Get today's count for this department prefix
   const appointments = await FirebaseService.getAll('appointments');
-  const todayAppointments = appointments.filter(a =>
-    a.bookedOn === today && (a.department === department || !a.department)
-  );
+  const todayAppointments = appointments.filter(a => {
+    if (a.bookedOn !== today) return false;
+
+    // Match by departmentPrefix field (new appointments)
+    if (a.departmentPrefix === departmentPrefix) return true;
+
+    // Fallback: match by token prefix pattern (for old appointments or data migration)
+    if (a.token && a.token.startsWith(`${departmentPrefix}-`)) return true;
+
+    return false;
+  });
 
   const count = todayAppointments.length + 1;
-  return `T-${count.toString().padStart(3, '0')}`;
+  return `${departmentPrefix}-${count.toString().padStart(3, '0')}`;
 };
 
 // GET /api/appointments - Get all appointments
@@ -104,6 +111,7 @@ router.post('/', optionalAuth, async (req, res) => {
     const {
       patient, age, gender, phone, email,
       doctorId, doctor, specialty,
+      departmentId, department,
       visitType, slot, bookedOn,
       symptoms, notes, amount
     } = req.body;
@@ -113,8 +121,21 @@ router.post('/', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Patient name, doctor, and slot are required' });
     }
 
-    // Generate token
-    const token = await generateToken();
+    // Get department prefix for token generation
+    let departmentPrefix = 'GEN';
+    if (departmentId) {
+      try {
+        const dept = await FirebaseService.getById('departments', departmentId);
+        if (dept && dept.prefix) {
+          departmentPrefix = dept.prefix;
+        }
+      } catch (error) {
+        console.warn('Could not fetch department, using GEN prefix');
+      }
+    }
+
+    // Generate token with department prefix
+    const token = await generateToken(departmentPrefix);
 
     const appointmentId = uuidv4();
     const appointment = await FirebaseService.createWithId('appointments', appointmentId, {
@@ -127,6 +148,9 @@ router.post('/', optionalAuth, async (req, res) => {
       doctorId: doctorId || '',
       doctor,
       specialty: specialty || '',
+      departmentId: departmentId || '',
+      department: department || '',
+      departmentPrefix,
       visitType: visitType || 'clinic',
       slot,
       bookedOn: bookedOn || new Date().toISOString().split('T')[0],

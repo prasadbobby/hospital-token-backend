@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/tokens/queue - Get current token queue
 router.get('/queue', optionalAuth, async (req, res) => {
   try {
-    const { doctorId } = req.query;
+    const { doctorId, departmentId } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
     let appointments = await FirebaseService.getAll('appointments');
@@ -21,6 +21,11 @@ router.get('/queue', optionalAuth, async (req, res) => {
     // Filter by doctor if specified
     if (doctorId) {
       appointments = appointments.filter(a => a.doctorId === doctorId);
+    }
+
+    // Filter by department if specified
+    if (departmentId) {
+      appointments = appointments.filter(a => a.departmentId === departmentId);
     }
 
     // Sort: priority patients first, then by slot time
@@ -47,7 +52,7 @@ router.get('/queue', optionalAuth, async (req, res) => {
 // GET /api/tokens/current - Get current serving token
 router.get('/current', optionalAuth, async (req, res) => {
   try {
-    const { doctorId } = req.query;
+    const { doctorId, departmentId } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
     let appointments = await FirebaseService.getAll('appointments');
@@ -56,17 +61,19 @@ router.get('/current', optionalAuth, async (req, res) => {
     let current = appointments.find(a =>
       a.bookedOn === today &&
       a.status === 'in-consult' &&
-      (!doctorId || a.doctorId === doctorId)
+      (!doctorId || a.doctorId === doctorId) &&
+      (!departmentId || a.departmentId === departmentId)
     );
 
     if (!current) {
-      return res.json({ token: 'NO TOKEN', patient: '', doctor: '' });
+      return res.json({ token: 'NO TOKEN', patient: '', doctor: '', departmentId: '' });
     }
 
     res.json({
       token: current.token,
       patient: current.patient,
       doctor: current.doctor,
+      departmentId: current.departmentId || '',
       id: current.id
     });
   } catch (error) {
@@ -78,7 +85,7 @@ router.get('/current', optionalAuth, async (req, res) => {
 // POST /api/tokens/next - Call next patient
 router.post('/next', optionalAuth, async (req, res) => {
   try {
-    const { doctorId } = req.body;
+    const { doctorId, departmentId } = req.body;
     const today = new Date().toISOString().split('T')[0];
 
     let appointments = await FirebaseService.getAll('appointments');
@@ -87,7 +94,8 @@ router.post('/next', optionalAuth, async (req, res) => {
     const currentInConsult = appointments.find(a =>
       a.bookedOn === today &&
       a.status === 'in-consult' &&
-      (!doctorId || a.doctorId === doctorId)
+      (!doctorId || a.doctorId === doctorId) &&
+      (!departmentId || a.departmentId === departmentId)
     );
 
     if (currentInConsult) {
@@ -99,7 +107,8 @@ router.post('/next', optionalAuth, async (req, res) => {
       .filter(a =>
         a.bookedOn === today &&
         a.status === 'waiting' &&
-        (!doctorId || a.doctorId === doctorId)
+        (!doctorId || a.doctorId === doctorId) &&
+        (!departmentId || a.departmentId === departmentId)
       )
       .sort((a, b) => a.slot?.localeCompare(b.slot) || 0);
 
@@ -201,7 +210,7 @@ router.post('/unhold', optionalAuth, async (req, res) => {
 // POST /api/tokens/extra - Generate extra token
 router.post('/extra', optionalAuth, async (req, res) => {
   try {
-    const { patient, doctorId, doctor, reason } = req.body;
+    const { patient, doctorId, doctor, reason, departmentId, department } = req.body;
 
     if (!patient) {
       return res.status(400).json({ error: 'Patient name is required' });
@@ -209,17 +218,44 @@ router.post('/extra', optionalAuth, async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Get current count
-    const appointments = await FirebaseService.getAll('appointments');
-    const todayCount = appointments.filter(a => a.bookedOn === today).length;
+    // Get department prefix
+    let departmentPrefix = 'E'; // Default for extra tokens without department
+    let deptName = department || '';
 
-    const token = `E-${(todayCount + 1).toString().padStart(3, '0')}`;
+    if (departmentId) {
+      try {
+        const dept = await FirebaseService.getById('departments', departmentId);
+        if (dept && dept.prefix) {
+          departmentPrefix = `${dept.prefix}E`; // CARE, ORTE, etc.
+          deptName = dept.name || deptName;
+        }
+      } catch (error) {
+        console.warn('Could not fetch department, using default E prefix');
+      }
+    }
+
+    // Get department-specific count for extra tokens
+    const appointments = await FirebaseService.getAll('appointments');
+    const departmentExtraCount = appointments.filter(a => {
+      if (a.bookedOn !== today || !a.isExtra) return false;
+
+      // Match by departmentPrefix or token prefix
+      if (a.departmentPrefix === departmentPrefix) return true;
+      if (a.token && a.token.startsWith(`${departmentPrefix}-`)) return true;
+
+      return false;
+    }).length;
+
+    const token = `${departmentPrefix}-${(departmentExtraCount + 1).toString().padStart(3, '0')}`;
 
     const appointment = await FirebaseService.create('appointments', {
       token,
       patient,
       doctorId: doctorId || '',
       doctor: doctor || '',
+      departmentId: departmentId || '',
+      department: deptName,
+      departmentPrefix,
       bookedOn: today,
       slot: new Date().toTimeString().slice(0, 5),
       status: 'waiting',
@@ -266,7 +302,7 @@ router.get('/stats', optionalAuth, async (req, res) => {
 // GET /api/tokens/held - Get patients on hold
 router.get('/held', optionalAuth, async (req, res) => {
   try {
-    const { doctorId } = req.query;
+    const { doctorId, departmentId } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
     let appointments = await FirebaseService.getAll('appointments');
@@ -282,6 +318,11 @@ router.get('/held', optionalAuth, async (req, res) => {
       held = held.filter(a => a.doctorId === doctorId);
     }
 
+    // Filter by department if specified
+    if (departmentId) {
+      held = held.filter(a => a.departmentId === departmentId);
+    }
+
     // Sort by hold time
     held.sort((a, b) => a.heldAt?.localeCompare(b.heldAt) || 0);
 
@@ -295,9 +336,15 @@ router.get('/held', optionalAuth, async (req, res) => {
 // GET /api/tokens/display - Get data for display board
 router.get('/display', async (req, res) => {
   try {
+    const { departmentId } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
     let appointments = await FirebaseService.getAll('appointments');
+
+    // Filter by department if specified
+    if (departmentId) {
+      appointments = appointments.filter(a => a.departmentId === departmentId);
+    }
 
     // Current patient being served
     const current = appointments.find(a =>
@@ -317,6 +364,7 @@ router.get('/display', async (req, res) => {
         token: a.token,
         patient: a.patient,
         doctor: a.doctor,
+        departmentId: a.departmentId || '',
         waitMin: (i + 1) * 10,
         priority: a.priority || false
       }));
@@ -325,13 +373,81 @@ router.get('/display', async (req, res) => {
       current: current ? {
         token: current.token,
         patient: current.patient,
-        doctor: current.doctor
-      } : { token: 'NO TOKEN', patient: '', doctor: '' },
+        doctor: current.doctor,
+        departmentId: current.departmentId || ''
+      } : { token: 'NO TOKEN', patient: '', doctor: '', departmentId: '' },
       waiting
     });
   } catch (error) {
     console.error('Get display data error:', error);
     res.status(500).json({ error: 'Failed to fetch display data' });
+  }
+});
+
+// POST /api/tokens/migrate-departments - Fix appointments missing departmentId
+router.post('/migrate-departments', optionalAuth, async (req, res) => {
+  try {
+    // Fetch all departments to build prefix → ID map
+    const departments = await FirebaseService.getAll('departments');
+    const prefixMap = {};
+    departments.forEach(dept => {
+      if (dept.prefix) {
+        prefixMap[dept.prefix] = dept.id;
+      }
+    });
+
+    // Fetch all appointments
+    let appointments = await FirebaseService.getAll('appointments');
+
+    // Find appointments with token prefix but missing departmentId
+    const toMigrate = appointments.filter(a => {
+      if (a.departmentId) return false; // Already has departmentId
+      if (!a.token) return false; // No token
+
+      // Check if token matches department prefix pattern (e.g., CAR-001, ORT-002)
+      const tokenPrefix = a.token.split('-')[0];
+      return prefixMap[tokenPrefix]; // Has a matching department
+    });
+
+    if (toMigrate.length === 0) {
+      return res.json({
+        message: 'No appointments need migration',
+        migrated: 0
+      });
+    }
+
+    // Update each appointment
+    const updates = [];
+    for (const appointment of toMigrate) {
+      const tokenPrefix = appointment.token.split('-')[0];
+      const departmentId = prefixMap[tokenPrefix];
+
+      if (departmentId) {
+        const department = departments.find(d => d.id === departmentId);
+        updates.push(
+          FirebaseService.update('appointments', appointment.id, {
+            departmentId,
+            department: department?.name || '',
+            departmentPrefix: tokenPrefix
+          })
+        );
+      }
+    }
+
+    await Promise.all(updates);
+
+    res.json({
+      message: 'Appointments migrated successfully',
+      migrated: updates.length,
+      appointments: toMigrate.map(a => ({
+        id: a.id,
+        token: a.token,
+        patient: a.patient
+      }))
+    });
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({ error: 'Failed to migrate appointments' });
   }
 });
 

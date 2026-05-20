@@ -121,7 +121,9 @@ router.post('/next', async (req, res) => {
         current: {
           token: next.token,
           patient: next.patient,
-          doctor: next.doctor
+          doctor: next.doctor,
+          departmentId: next.departmentId || '',
+          department: next.department || ''
         }
       });
     }
