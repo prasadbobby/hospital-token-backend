@@ -1,11 +1,11 @@
 import express from 'express';
 import { db } from '../config/firebase.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all departments
-router.get('/', authenticate, async (req, res) => {
+// Get all departments (public access for display boards)
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { active } = req.query;
 
@@ -38,8 +38,8 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get department by ID
-router.get('/:id', authenticate, async (req, res) => {
+// Get department by ID (public access for display boards)
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const snapshot = await db.ref(`departments/${id}`).once('value');

@@ -206,6 +206,21 @@ router.post('/', optionalAuth, async (req, res) => {
       await FirebaseService.increment('doctors', doctorId, 'todayPatients', 1);
     }
 
+    // Broadcast to WebSocket clients (for display boards)
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'patient_registered',
+        appointment: {
+          token: appointment.token,
+          patient: appointment.patient,
+          doctor: appointment.doctor,
+          departmentId: appointment.departmentId || ''
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
     res.status(201).json(appointment);
   } catch (error) {
     console.error('Create appointment error:', error);
@@ -254,6 +269,158 @@ router.patch('/:id/status', optionalAuth, async (req, res) => {
   } catch (error) {
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
+// PATCH /api/appointments/:id/transfer - Transfer appointment to another doctor
+router.patch('/:id/transfer', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newDoctorId, reason } = req.body;
+
+    if (!newDoctorId) {
+      return res.status(400).json({ error: 'New doctor ID is required' });
+    }
+
+    const appointment = await FirebaseService.getById('appointments', id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const newDoctor = await FirebaseService.getById('doctors', newDoctorId);
+    if (!newDoctor) {
+      return res.status(404).json({ error: 'New doctor not found' });
+    }
+
+    // Check if new doctor is available
+    if (newDoctor.availabilityStatus && newDoctor.availabilityStatus !== 'available') {
+      return res.status(400).json({
+        error: `Dr. ${newDoctor.name} is currently ${newDoctor.availabilityStatus}`
+      });
+    }
+
+    const oldDoctorId = appointment.doctorId;
+    const oldDoctorName = appointment.doctor;
+
+    // Update appointment with new doctor
+    const updatedAppointment = await FirebaseService.update('appointments', id, {
+      doctorId: newDoctorId,
+      doctor: newDoctor.name,
+      specialty: newDoctor.specialty || appointment.specialty,
+      transferredFrom: oldDoctorId,
+      transferredFromName: oldDoctorName,
+      transferReason: reason || 'Doctor unavailable',
+      transferredAt: new Date().toISOString(),
+      transferredBy: req.user.email
+    });
+
+    // Broadcast transfer event
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'patient_transferred',
+        appointment: {
+          token: updatedAppointment.token,
+          patient: updatedAppointment.patient,
+          fromDoctor: oldDoctorName,
+          toDoctor: newDoctor.name
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json(updatedAppointment);
+  } catch (error) {
+    console.error('Transfer appointment error:', error);
+    res.status(500).json({ error: 'Failed to transfer appointment' });
+  }
+});
+
+// POST /api/appointments/bulk-transfer - Transfer multiple appointments to another doctor
+router.post('/bulk-transfer', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+  try {
+    const { appointmentIds, newDoctorId, reason } = req.body;
+
+    if (!appointmentIds || !Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+      return res.status(400).json({ error: 'Appointment IDs array is required' });
+    }
+
+    if (!newDoctorId) {
+      return res.status(400).json({ error: 'New doctor ID is required' });
+    }
+
+    const newDoctor = await FirebaseService.getById('doctors', newDoctorId);
+    if (!newDoctor) {
+      return res.status(404).json({ error: 'New doctor not found' });
+    }
+
+    // Check if new doctor is available
+    if (newDoctor.availabilityStatus && newDoctor.availabilityStatus !== 'available') {
+      return res.status(400).json({
+        error: `Dr. ${newDoctor.name} is currently ${newDoctor.availabilityStatus}`
+      });
+    }
+
+    const results = {
+      success: [],
+      failed: []
+    };
+
+    // Process each appointment
+    for (const appointmentId of appointmentIds) {
+      try {
+        const appointment = await FirebaseService.getById('appointments', appointmentId);
+        if (!appointment) {
+          results.failed.push({ id: appointmentId, error: 'Appointment not found' });
+          continue;
+        }
+
+        const oldDoctorId = appointment.doctorId;
+        const oldDoctorName = appointment.doctor;
+
+        // Update appointment with new doctor
+        const updatedAppointment = await FirebaseService.update('appointments', appointmentId, {
+          doctorId: newDoctorId,
+          doctor: newDoctor.name,
+          specialty: newDoctor.specialty || appointment.specialty,
+          transferredFrom: oldDoctorId,
+          transferredFromName: oldDoctorName,
+          transferReason: reason || 'Bulk transfer - Doctor unavailable',
+          transferredAt: new Date().toISOString(),
+          transferredBy: req.user.email
+        });
+
+        results.success.push({
+          id: appointmentId,
+          token: updatedAppointment.token,
+          patient: updatedAppointment.patient,
+          fromDoctor: oldDoctorName
+        });
+      } catch (err) {
+        results.failed.push({ id: appointmentId, error: err.message });
+      }
+    }
+
+    // Broadcast bulk transfer event
+    const broadcast = req.app.get('broadcast');
+    if (broadcast && results.success.length > 0) {
+      broadcast('tokens', {
+        type: 'bulk_transfer',
+        toDoctor: newDoctor.name,
+        count: results.success.length,
+        patients: results.success.map(s => s.patient),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      message: `${results.success.length} patients transferred successfully`,
+      toDoctor: newDoctor.name,
+      results
+    });
+  } catch (error) {
+    console.error('Bulk transfer error:', error);
+    res.status(500).json({ error: 'Failed to bulk transfer appointments' });
   }
 });
 

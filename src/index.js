@@ -30,6 +30,8 @@ import reviewRoutes from './routes/reviews.js';
 import statsRoutes from './routes/stats.js';
 import deviceRoutes from './routes/device.js';
 import departmentRoutes from './routes/departments.js';
+import displayConfigRoutes from './routes/displayConfigs.js';
+import settingsRoutes from './routes/settings.js';
 
 const app = express();
 const server = createServer(app);
@@ -50,8 +52,9 @@ const wss = new WebSocketServer({
 });
 
 const clients = new Map(); // Store client metadata
-const MAX_CONNECTIONS_PER_IP = 5;
+const MAX_CONNECTIONS_PER_IP = 15; // Increased for dev (multiple tabs, StrictMode)
 const ipConnections = new Map();
+const recentPublicConnections = new Map(); // Track recent public connections to suppress StrictMode warnings
 
 // Authenticate WebSocket connection
 function authenticateWsConnection(token) {
@@ -85,9 +88,28 @@ wss.on('connection', (ws, req) => {
 
   // Allow public read-only access for display boards
   if (!user && !publicAccess) {
-    console.log('[WS] Unauthorized connection attempt');
+    // Check if there's any active public connection from this IP (React StrictMode/dev duplicates)
+    const hasActivePublicConnection = Array.from(clients.values()).some(
+      client => client.ip === ip && client.isPublic
+    );
+
+    // Also check recent attempts within last 5 seconds (for race conditions)
+    const recentPublic = recentPublicConnections.get(ip);
+    const hasRecentPublic = recentPublic && (Date.now() - recentPublic) < 5000;
+
+    // Only log if no active or recent public connection (genuine unauthorized attempt)
+    if (!hasActivePublicConnection && !hasRecentPublic) {
+      console.log(`[WS] Connection rejected from ${ip}: No auth token and no public flag`);
+    }
     ws.close(1008, 'Authentication required. Add ?public=true for display board access');
     return;
+  }
+
+  // Track public connections to suppress warnings
+  if (!user && publicAccess) {
+    recentPublicConnections.set(ip, Date.now());
+    // Clean up old entries after 10 seconds
+    setTimeout(() => recentPublicConnections.delete(ip), 10000);
   }
 
   // Track connection
@@ -277,6 +299,8 @@ app.use('/api/symptoms', symptomRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/device', deviceRoutes);
+app.use('/api/display-configs', displayConfigRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // ==========================================
 // Error Handlers

@@ -20,6 +20,28 @@ router.get('/', optionalAuth, async (req, res) => {
       doctors = doctors.filter(d => d.active === (active === 'true'));
     }
 
+    // Calculate today's patient count for each doctor
+    const today = new Date().toISOString().split('T')[0];
+    const appointments = await FirebaseService.getAll('appointments');
+
+    // Count today's appointments per doctor (exclude cancelled)
+    const todayAppointmentCounts = {};
+    appointments.forEach(apt => {
+      const aptDate = apt.bookedOn || apt.date || (apt.createdAt ? apt.createdAt.split('T')[0] : null);
+      if (aptDate === today && apt.status !== 'cancelled') {
+        const doctorId = apt.doctorId;
+        if (doctorId) {
+          todayAppointmentCounts[doctorId] = (todayAppointmentCounts[doctorId] || 0) + 1;
+        }
+      }
+    });
+
+    // Add todayPatients count to each doctor
+    doctors = doctors.map(doctor => ({
+      ...doctor,
+      todayPatients: todayAppointmentCounts[doctor.id] || 0
+    }));
+
     // Sort by name
     doctors.sort((a, b) => a.name?.localeCompare(b.name) || 0);
 
@@ -27,6 +49,35 @@ router.get('/', optionalAuth, async (req, res) => {
   } catch (error) {
     console.error('Get doctors error:', error);
     res.status(500).json({ error: 'Failed to fetch doctors' });
+  }
+});
+
+// GET /api/doctors/me - Get current doctor's profile
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    // First try to find by document ID (if user ID matches doctor ID)
+    let doctor = await FirebaseService.getById('doctors', req.user.id);
+
+    // If not found, search by userId field
+    if (!doctor) {
+      const doctors = await FirebaseService.getByField('doctors', 'userId', req.user.id);
+      doctor = doctors[0] || null;
+    }
+
+    // Also try by email as fallback
+    if (!doctor) {
+      const doctors = await FirebaseService.getByField('doctors', 'email', req.user.email);
+      doctor = doctors[0] || null;
+    }
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor profile not found' });
+    }
+
+    res.json(doctor);
+  } catch (error) {
+    console.error('Get doctor profile error:', error);
+    res.status(500).json({ error: 'Failed to fetch doctor profile' });
   }
 });
 
@@ -76,7 +127,11 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       revenue: 0,
       tokenLimit: tokenLimit || 40,
       slotDuration: slotDuration || 15,
-      active: true
+      active: true,
+      // Availability status fields
+      availabilityStatus: 'available', // available, busy, emergency, operation, break, outside, offline
+      statusMessage: '',
+      statusUpdatedAt: new Date().toISOString()
     });
 
     res.status(201).json(doctor);
@@ -281,6 +336,79 @@ router.get('/:id/slots', optionalAuth, async (req, res) => {
   } catch (error) {
     console.error('Get slots error:', error);
     res.status(500).json({ error: 'Failed to fetch slots' });
+  }
+});
+
+// PATCH /api/doctors/me/status - Update current doctor's availability status
+router.patch('/me/status', authenticate, authorize('doctor'), async (req, res) => {
+  try {
+    const { availabilityStatus, statusMessage } = req.body;
+
+    // Find the doctor by user ID or email
+    let doctor = await FirebaseService.getById('doctors', req.user.id);
+    if (!doctor) {
+      const doctors = await FirebaseService.getByField('doctors', 'userId', req.user.id);
+      doctor = doctors[0];
+    }
+    if (!doctor) {
+      const doctors = await FirebaseService.getByField('doctors', 'email', req.user.email);
+      doctor = doctors[0];
+    }
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor profile not found' });
+    }
+
+    // Valid status values
+    const validStatuses = ['available', 'busy', 'emergency', 'operation', 'break', 'outside', 'offline'];
+    if (availabilityStatus && !validStatuses.includes(availabilityStatus)) {
+      return res.status(400).json({ error: 'Invalid availability status' });
+    }
+
+    const updates = {
+      ...(availabilityStatus && { availabilityStatus }),
+      ...(statusMessage !== undefined && { statusMessage }),
+      statusUpdatedAt: new Date().toISOString()
+    };
+
+    const updated = await FirebaseService.update('doctors', doctor.id, updates);
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Update doctor status error:', error);
+    res.status(500).json({ error: 'Failed to update doctor status' });
+  }
+});
+
+// PATCH /api/doctors/:id/status - Update doctor availability status (admin only)
+router.patch('/:id/status', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { availabilityStatus, statusMessage } = req.body;
+
+    const doctor = await FirebaseService.getById('doctors', id);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    // Valid status values
+    const validStatuses = ['available', 'busy', 'emergency', 'operation', 'break', 'outside', 'offline'];
+    if (availabilityStatus && !validStatuses.includes(availabilityStatus)) {
+      return res.status(400).json({ error: 'Invalid availability status' });
+    }
+
+    const updates = {
+      ...(availabilityStatus && { availabilityStatus }),
+      ...(statusMessage !== undefined && { statusMessage }),
+      statusUpdatedAt: new Date().toISOString()
+    };
+
+    const updated = await FirebaseService.update('doctors', id, updates);
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Update doctor status error:', error);
+    res.status(500).json({ error: 'Failed to update doctor status' });
   }
 });
 

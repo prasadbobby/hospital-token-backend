@@ -11,7 +11,7 @@ const router = Router();
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name, role, phone, specialty, shift, sendActivationEmail = false } = req.body;
+    const { email, password, name, role, phone, specialty, shift, experience, qualifications, sendActivationEmail = false } = req.body;
 
     // Validate required fields
     if (!email || !name || !role) {
@@ -75,7 +75,8 @@ router.post('/register', async (req, res) => {
         email: email.toLowerCase(),
         specialty: specialty || 'General Medicine',
         phone: phone || '',
-        experience: 0,
+        experience: parseInt(experience) || 0,
+        qualifications: qualifications || '',
         rating: 0,
         reviewsCount: 0,
         todayPatients: 0,

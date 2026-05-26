@@ -147,6 +147,30 @@ export const FirebaseService = {
   // Check connection status (always true since we require connection)
   isConnected() {
     return true;
+  },
+
+  // Get application settings
+  async getSettings() {
+    try {
+      const snapshot = await db.ref('settings').once('value');
+      return snapshot.val() || {};
+    } catch (error) {
+      console.error('[Firebase] getSettings error:', error.message);
+      throw error;
+    }
+  },
+
+  // Update application settings
+  async updateSettings(updates) {
+    try {
+      const ref = db.ref('settings');
+      await ref.update(updates);
+      const snapshot = await ref.once('value');
+      return snapshot.val();
+    } catch (error) {
+      console.error('[Firebase] updateSettings error:', error.message);
+      throw error;
+    }
   }
 };
 

@@ -1,0 +1,46 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+
+    "users": {
+      ".indexOn": ["email", "role"]
+    },
+
+    "appointments": {
+      ".indexOn": ["bookedOn", "status", "doctorId", "departmentId", "createdAt"]
+    },
+
+    "doctors": {
+      ".indexOn": ["email", "specialty", "isActive"]
+    },
+
+    "patients": {
+      ".indexOn": ["email", "phone"]
+    },
+
+    "departments": {
+      ".indexOn": ["prefix", "active"]
+    },
+
+    "displayConfigs": {
+      ".indexOn": ["screenNumber", "active"]
+    },
+
+    "services": {
+      ".indexOn": ["mode", "active"]
+    },
+
+    "reviews": {
+      ".indexOn": ["doctorId", "patientId", "createdAt"]
+    },
+
+    "receptionists": {
+      ".indexOn": ["email", "active"]
+    },
+
+    "symptoms": {
+      ".indexOn": ["category"]
+    }
+  }
+}

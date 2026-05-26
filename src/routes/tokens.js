@@ -28,11 +28,14 @@ router.get('/queue', optionalAuth, async (req, res) => {
       appointments = appointments.filter(a => a.departmentId === departmentId);
     }
 
-    // Sort: priority patients first, then by slot time
+    // Sort: priority patients first, then by registration time (first registered = first in queue)
     appointments.sort((a, b) => {
       if (a.priority && !b.priority) return -1;
       if (!a.priority && b.priority) return 1;
-      return a.slot?.localeCompare(b.slot) || 0;
+      // Sort by registration time (earlier = first)
+      const aTime = new Date(a.createdAt || a.checkedInAt || 0).getTime();
+      const bTime = new Date(b.createdAt || b.checkedInAt || 0).getTime();
+      return aTime - bTime;
     });
 
     // Add position and wait time
@@ -102,7 +105,7 @@ router.post('/next', optionalAuth, async (req, res) => {
       await FirebaseService.update('appointments', currentInConsult.id, { status: 'done' });
     }
 
-    // Get next waiting patient
+    // Get next waiting patient - sorted by priority, then registration time
     const waiting = appointments
       .filter(a =>
         a.bookedOn === today &&
@@ -110,7 +113,13 @@ router.post('/next', optionalAuth, async (req, res) => {
         (!doctorId || a.doctorId === doctorId) &&
         (!departmentId || a.departmentId === departmentId)
       )
-      .sort((a, b) => a.slot?.localeCompare(b.slot) || 0);
+      .sort((a, b) => {
+        if (a.priority && !b.priority) return -1;
+        if (!a.priority && b.priority) return 1;
+        const aTime = new Date(a.createdAt || a.checkedInAt || 0).getTime();
+        const bTime = new Date(b.createdAt || b.checkedInAt || 0).getTime();
+        return aTime - bTime;
+      });
 
     if (waiting.length === 0) {
       return res.json({ token: 'NO TOKEN', patient: '', message: 'No more patients in queue' });
@@ -121,16 +130,88 @@ router.post('/next', optionalAuth, async (req, res) => {
     // Update status to in-consult
     await FirebaseService.update('appointments', next.id, { status: 'in-consult' });
 
-    res.json({
+    const result = {
       token: next.token,
       patient: next.patient,
       doctor: next.doctor,
+      departmentId: next.departmentId || '',
       id: next.id,
       message: 'Next patient called'
-    });
+    };
+
+    // Broadcast to WebSocket clients
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'next_patient',
+        current: result,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Call next error:', error);
     res.status(500).json({ error: 'Failed to call next patient' });
+  }
+});
+
+// POST /api/tokens/done - Mark current patient as done (without calling next)
+router.post('/done', optionalAuth, async (req, res) => {
+  try {
+    const { appointmentId, doctorId, departmentId } = req.body;
+    const today = new Date().toISOString().split('T')[0];
+
+    let appointment;
+
+    if (appointmentId) {
+      // Mark specific appointment as done
+      appointment = await FirebaseService.getById('appointments', appointmentId);
+      if (!appointment) {
+        return res.status(404).json({ error: 'Appointment not found' });
+      }
+    } else {
+      // Find current in-consult appointment
+      let appointments = await FirebaseService.getAll('appointments');
+      appointment = appointments.find(a =>
+        a.bookedOn === today &&
+        a.status === 'in-consult' &&
+        (!doctorId || a.doctorId === doctorId) &&
+        (!departmentId || a.departmentId === departmentId)
+      );
+
+      if (!appointment) {
+        return res.json({ message: 'No patient currently in consult' });
+      }
+    }
+
+    // Update status to done
+    await FirebaseService.update('appointments', appointment.id, {
+      status: 'done',
+      completedAt: new Date().toISOString()
+    });
+
+    const result = {
+      message: 'Consultation completed',
+      token: appointment.token,
+      patient: appointment.patient,
+      id: appointment.id
+    };
+
+    // Broadcast to WebSocket clients
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'consultation_done',
+        appointment: result,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Mark done error:', error);
+    res.status(500).json({ error: 'Failed to mark consultation as done' });
   }
 });
 
@@ -149,6 +230,16 @@ router.post('/skip', optionalAuth, async (req, res) => {
       skipped: true,
       skipReason: reason || 'Patient not present'
     });
+
+    // Broadcast to WebSocket clients
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'patient_skipped',
+        appointmentId,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.json({ message: 'Patient skipped' });
   } catch (error) {
@@ -266,6 +357,21 @@ router.post('/extra', optionalAuth, async (req, res) => {
       amount: 500
     });
 
+    // Broadcast to WebSocket clients
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'patient_registered',
+        appointment: {
+          token: appointment.token,
+          patient: appointment.patient,
+          doctor: appointment.doctor,
+          departmentId: appointment.departmentId || ''
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
     res.status(201).json(appointment);
   } catch (error) {
     console.error('Generate extra token error:', error);
@@ -351,13 +457,15 @@ router.get('/display', async (req, res) => {
       a.bookedOn === today && a.status === 'in-consult'
     );
 
-    // Waiting patients (exclude on-hold)
+    // Waiting patients (exclude on-hold) - sorted by priority, then registration time
     const waiting = appointments
       .filter(a => a.bookedOn === today && a.status === 'waiting')
       .sort((a, b) => {
         if (a.priority && !b.priority) return -1;
         if (!a.priority && b.priority) return 1;
-        return a.slot?.localeCompare(b.slot) || 0;
+        const aTime = new Date(a.createdAt || a.checkedInAt || 0).getTime();
+        const bTime = new Date(b.createdAt || b.checkedInAt || 0).getTime();
+        return aTime - bTime;
       })
       .slice(0, 10)
       .map((a, i) => ({
