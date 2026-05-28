@@ -69,7 +69,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // PUT /api/receptionists/:id - Update receptionist
-router.put('/:id', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+router.put('/:id', authenticate, authorize(['admin', 'receptionist']), async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;

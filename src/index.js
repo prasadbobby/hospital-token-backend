@@ -58,11 +58,15 @@ const recentPublicConnections = new Map(); // Track recent public connections to
 
 // Authenticate WebSocket connection
 function authenticateWsConnection(token) {
+  if (!token) {
+    return null;
+  }
   try {
     const JWT_SECRET = process.env.JWT_SECRET || 'pulse-opd-secret-key';
     const decoded = jwt.verify(token, JWT_SECRET);
     return decoded;
   } catch (error) {
+    console.log(`[WS] Token verification failed: ${error.message}`);
     return null;
   }
 }

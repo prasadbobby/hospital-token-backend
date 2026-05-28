@@ -142,7 +142,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // PUT /api/doctors/:id - Update doctor
-router.put('/:id', authenticate, authorize('admin', 'doctor'), async (req, res) => {
+router.put('/:id', authenticate, authorize(['admin', 'doctor']), async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -202,7 +202,7 @@ router.get('/:id/schedule', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/doctors/:id/schedule - Update doctor's schedule
-router.put('/:id/schedule', authenticate, authorize('admin', 'doctor'), async (req, res) => {
+router.put('/:id/schedule', authenticate, authorize(['admin', 'doctor']), async (req, res) => {
   try {
     const { id } = req.params;
     const { tokenLimit, slotDuration, weeklySchedule } = req.body;
@@ -266,7 +266,7 @@ router.get('/:id/availability', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/doctors/:id/availability - Update doctor's availability
-router.put('/:id/availability', authenticate, authorize('admin', 'doctor'), async (req, res) => {
+router.put('/:id/availability', authenticate, authorize(['admin', 'doctor']), async (req, res) => {
   try {
     const { id } = req.params;
     const { date, clinic, home, video, slots } = req.body;

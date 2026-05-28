@@ -273,7 +273,7 @@ router.patch('/:id/status', optionalAuth, async (req, res) => {
 });
 
 // PATCH /api/appointments/:id/transfer - Transfer appointment to another doctor
-router.patch('/:id/transfer', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+router.patch('/:id/transfer', authenticate, authorize(['admin', 'receptionist']), async (req, res) => {
   try {
     const { id } = req.params;
     const { newDoctorId, reason } = req.body;
@@ -337,7 +337,7 @@ router.patch('/:id/transfer', authenticate, authorize('admin', 'receptionist'), 
 });
 
 // POST /api/appointments/bulk-transfer - Transfer multiple appointments to another doctor
-router.post('/bulk-transfer', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+router.post('/bulk-transfer', authenticate, authorize(['admin', 'receptionist']), async (req, res) => {
   try {
     const { appointmentIds, newDoctorId, reason } = req.body;
 
@@ -425,7 +425,7 @@ router.post('/bulk-transfer', authenticate, authorize('admin', 'receptionist'), 
 });
 
 // DELETE /api/appointments/:id - Delete appointment
-router.delete('/:id', authenticate, authorize('admin', 'receptionist'), async (req, res) => {
+router.delete('/:id', authenticate, authorize(['admin', 'receptionist']), async (req, res) => {
   try {
     await FirebaseService.delete('appointments', req.params.id);
     res.json({ message: 'Appointment deleted successfully' });
