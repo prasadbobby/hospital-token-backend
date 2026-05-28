@@ -559,4 +559,39 @@ router.post('/migrate-departments', optionalAuth, async (req, res) => {
   }
 });
 
+// POST /api/tokens/recall - Recall a patient (broadcasts to display boards)
+router.post('/recall', authenticate, authorize(['admin', 'doctor', 'receptionist']), async (req, res) => {
+  try {
+    const { appointmentId, token, patient, department, doctor } = req.body;
+
+    if (!token || !patient) {
+      return res.status(400).json({ error: 'Token and patient name are required' });
+    }
+
+    // Broadcast recall message to all connected display boards
+    const broadcast = req.app.get('broadcast');
+    if (broadcast) {
+      broadcast('tokens', {
+        type: 'recall_patient',
+        appointment: {
+          id: appointmentId,
+          token,
+          patient,
+          department: department || 'the counter',
+          doctor: doctor || 'doctor'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Recall announcement sent for ${patient}`
+    });
+  } catch (error) {
+    console.error('Recall error:', error);
+    res.status(500).json({ error: 'Failed to broadcast recall' });
+  }
+});
+
 export default router;
