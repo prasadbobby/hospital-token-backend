@@ -32,6 +32,7 @@ import deviceRoutes from './routes/device.js';
 import departmentRoutes from './routes/departments.js';
 import displayConfigRoutes from './routes/displayConfigs.js';
 import settingsRoutes from './routes/settings.js';
+import searchRoutes from './routes/search.js';
 
 const app = express();
 const server = createServer(app);
@@ -305,6 +306,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/display-configs', displayConfigRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/search', searchRoutes);
 
 // ==========================================
 // Error Handlers

@@ -232,58 +232,63 @@ router.put('/:id/schedule', authenticate, authorize(['admin', 'doctor']), async 
   }
 });
 
-// GET /api/doctors/:id/availability - Get doctor's availability for next 21 days
+// GET /api/doctors/:id/availability - Get doctor's availability settings
 router.get('/:id/availability', optionalAuth, async (req, res) => {
   try {
-    let availability = await FirebaseService.getByField('availability', 'doctorId', req.params.id);
+    const doctorId = req.params.id;
 
-    // Generate dates for next 21 days if no availability set
-    if (availability.length === 0) {
-      const dates = [];
-      for (let i = 0; i < 21; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-        const dayOfWeek = date.getDay();
+    // Get global availability settings for this doctor
+    const settings = await FirebaseService.getById('doctorAvailability', doctorId);
 
-        dates.push({
-          date: dateStr,
-          dayOfWeek,
-          clinic: dayOfWeek !== 0,
-          home: dayOfWeek !== 0 && dayOfWeek !== 6,
-          video: true,
-          slots: []
-        });
-      }
-      return res.json(dates);
+    if (!settings) {
+      // Return default settings
+      return res.json({
+        doctorId,
+        blockedDates: [],
+        scheduledEvents: [],
+        timeFrom: "10:00",
+        timeTo: "18:00"
+      });
     }
 
-    res.json(availability);
+    res.json(settings);
   } catch (error) {
     console.error('Get availability error:', error);
     res.status(500).json({ error: 'Failed to fetch availability' });
   }
 });
 
-// PUT /api/doctors/:id/availability - Update doctor's availability
+// PUT /api/doctors/:id/availability - Update doctor's availability settings
 router.put('/:id/availability', authenticate, authorize(['admin', 'doctor']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, clinic, home, video, slots } = req.body;
+    const { blockedDates, scheduledEvents, timeFrom, timeTo } = req.body;
 
-    // If doctor, can only update own availability
-    if (req.user.role === 'doctor' && req.user.id !== id) {
-      return res.status(403).json({ error: 'Can only update own availability' });
+    // If doctor, verify they own this profile
+    if (req.user.role === 'doctor') {
+      // Get the doctor profile to check ownership
+      const doctor = await FirebaseService.getById('doctors', id);
+      if (!doctor) {
+        return res.status(404).json({ error: 'Doctor not found' });
+      }
+
+      // Check if this doctor belongs to the current user (by userId field or email)
+      const isOwner = doctor.userId === req.user.id ||
+                      doctor.email === req.user.email ||
+                      doctor.id === req.user.id;
+
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Can only update own availability' });
+      }
     }
 
-    const availabilityId = `${id}-${date}`;
-    const availability = await FirebaseService.createWithId('availability', availabilityId, {
+    const availability = await FirebaseService.createWithId('doctorAvailability', id, {
       doctorId: id,
-      date,
-      clinic: clinic !== undefined ? clinic : true,
-      home: home !== undefined ? home : true,
-      video: video !== undefined ? video : true,
-      slots: slots || []
+      blockedDates: blockedDates || [],
+      scheduledEvents: scheduledEvents || [],
+      timeFrom: timeFrom || "10:00",
+      timeTo: timeTo || "18:00",
+      updatedAt: new Date().toISOString()
     });
 
     res.json(availability);

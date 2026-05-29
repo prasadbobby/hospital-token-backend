@@ -196,6 +196,20 @@ router.post('/login', async (req, res) => {
     }
     console.log('[Auth] Password valid');
 
+    // Fetch permissions for receptionists
+    let permissions = undefined;
+    if (user.role === 'receptionist') {
+      console.log('[Auth] Fetching receptionist permissions for user:', user.id, user.email);
+      const receptionist = await FirebaseService.getById('receptionists', user.id);
+      console.log('[Auth] Receptionist data:', receptionist);
+      if (receptionist?.permissions) {
+        permissions = receptionist.permissions;
+        console.log('[Auth] Receptionist permissions loaded:', permissions);
+      } else {
+        console.log('[Auth] NO PERMISSIONS FOUND for receptionist');
+      }
+    }
+
     // Generate token
     console.log('[Auth] Generating token...');
     const token = generateToken({
@@ -222,11 +236,14 @@ router.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role
+        role: user.role,
+        ...(permissions && { permissions })
       }
     };
 
-    console.log('[Auth] Response data size:', JSON.stringify(responseData).length);
+    console.log('[Auth] ==========================================');
+    console.log('[Auth] FINAL RESPONSE DATA:', JSON.stringify(responseData, null, 2));
+    console.log('[Auth] ==========================================');
     res.status(200).json(responseData);
     console.log('[Auth] res.json() called, headersSent:', res.headersSent);
     return;
@@ -247,10 +264,14 @@ router.get('/me', authenticate, async (req, res) => {
 
     // Get role-specific profile
     let profile = null;
+    let permissions = undefined;
     if (user.role === 'doctor') {
       profile = await FirebaseService.getById('doctors', req.user.id);
     } else if (user.role === 'receptionist') {
       profile = await FirebaseService.getById('receptionists', req.user.id);
+      if (profile?.permissions) {
+        permissions = profile.permissions;
+      }
     }
 
     res.json({
@@ -259,7 +280,8 @@ router.get('/me', authenticate, async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
-        phone: user.phone
+        phone: user.phone,
+        ...(permissions && { permissions })
       },
       profile
     });

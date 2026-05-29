@@ -58,7 +58,15 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       phone: phone || '',
       shifts: shifts || 'Mon-Fri 9am-5pm',
       assignedDoctors: assignedDoctors || [],
-      active: true
+      active: true,
+      permissions: {
+        canMarkDone: true,
+        canRecall: true,
+        canSkip: true,
+        canHold: true,
+        canTransfer: true,
+        canCallNext: true
+      }
     });
 
     res.status(201).json(receptionist);
@@ -120,6 +128,26 @@ router.patch('/:id/toggle', authenticate, authorize('admin'), async (req, res) =
   } catch (error) {
     console.error('Toggle receptionist error:', error);
     res.status(500).json({ error: 'Failed to toggle receptionist status' });
+  }
+});
+
+// PATCH /api/receptionists/:id/permissions - Update receptionist permissions (admin only)
+router.patch('/:id/permissions', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body;
+
+    const existing = await FirebaseService.getById('receptionists', id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Receptionist not found' });
+    }
+
+    const receptionist = await FirebaseService.update('receptionists', id, { permissions });
+
+    res.json(receptionist);
+  } catch (error) {
+    console.error('Update permissions error:', error);
+    res.status(500).json({ error: 'Failed to update permissions' });
   }
 });
 
