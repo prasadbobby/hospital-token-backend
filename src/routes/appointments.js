@@ -114,7 +114,8 @@ router.post('/', optionalAuth, async (req, res) => {
       departmentId, department,
       visitType, slot, bookedOn,
       symptoms, notes, amount,
-      patientId, cardValidUntil, hasValidCard
+      patientId, cardValidUntil, hasValidCard,
+      priority
     } = req.body;
 
     // Validate required fields
@@ -197,6 +198,7 @@ router.post('/', optionalAuth, async (req, res) => {
       amount: amount || 500,
       hasValidCard: hasValidCard || false,
       cardValidUntil: cardValidUntil || null,
+      priority: priority || false,
       position: 0,
       waitMin: 0
     });
@@ -215,7 +217,8 @@ router.post('/', optionalAuth, async (req, res) => {
           token: appointment.token,
           patient: appointment.patient,
           doctor: appointment.doctor,
-          departmentId: appointment.departmentId || ''
+          departmentId: appointment.departmentId || '',
+          priority: appointment.priority || false
         },
         timestamp: new Date().toISOString()
       });
