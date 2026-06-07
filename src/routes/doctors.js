@@ -129,7 +129,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       slotDuration: slotDuration || 15,
       active: true,
       // Availability status fields
-      availabilityStatus: 'available', // available, busy, emergency, operation, break, outside, offline
+      availabilityStatus: 'available', // available, busy, rounds, emergency, operation, break, outside, offline
       statusMessage: '',
       statusUpdatedAt: new Date().toISOString()
     });
@@ -365,7 +365,7 @@ router.patch('/me/status', authenticate, authorize('doctor'), async (req, res) =
     }
 
     // Valid status values
-    const validStatuses = ['available', 'busy', 'emergency', 'operation', 'break', 'outside', 'offline'];
+    const validStatuses = ['available', 'busy', 'rounds', 'emergency', 'operation', 'break', 'outside', 'offline'];
     if (availabilityStatus && !validStatuses.includes(availabilityStatus)) {
       return res.status(400).json({ error: 'Invalid availability status' });
     }
@@ -397,7 +397,7 @@ router.patch('/:id/status', authenticate, authorize('admin'), async (req, res) =
     }
 
     // Valid status values
-    const validStatuses = ['available', 'busy', 'emergency', 'operation', 'break', 'outside', 'offline'];
+    const validStatuses = ['available', 'busy', 'rounds', 'emergency', 'operation', 'break', 'outside', 'offline'];
     if (availabilityStatus && !validStatuses.includes(availabilityStatus)) {
       return res.status(400).json({ error: 'Invalid availability status' });
     }
